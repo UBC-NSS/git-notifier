@@ -1,13 +1,19 @@
+import re
+
+_pattern = re.compile('(  +)')
+
 def _mangle_line(line):
-  content = line.lstrip()
-  leadingspaces = '&nbsp;' * (len(line)-len(content))
+  content = line
+  m = _pattern.finditer(content)
+  for i in reversed(list(m)):
+    (start, end) = i.span()
+    content = content[:start] + ('&nbsp;' * (end-start)) + content[end:]
 
   if content.startswith('-'):
-    return '<span style="color:#800">%s%s</span>' % (leadingspaces, content)
+    return '<tt style="color:#800">%s</tt>' % (content)
   if content.startswith('+'):
-    return '<span style="color:#080">%s%s</span>' % (leadingspaces, content)
-  return '%s%s' % (leadingspaces, content)
-
+    return '<tt style="color:#080">%s</tt>' % (content)
+  return content
 
 def htmlify(text):
   lines = text.splitlines()
