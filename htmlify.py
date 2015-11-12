@@ -1,9 +1,10 @@
+import cgi
 import re
 
 _pattern = re.compile('(  +)')
 
 def _mangle_line(line):
-  content = line
+  content = cgi.escape(line)
   m = _pattern.finditer(content)
   for i in reversed(list(m)):
     (start, end) = i.span()
