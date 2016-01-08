@@ -1,6 +1,7 @@
 import cgi
 import re
 
+_separator = '>' + ('-'*63) + '\n'
 _pattern = re.compile('(  +)')
 
 def _mangle_line(line):
@@ -17,7 +18,19 @@ def _mangle_line(line):
   return content
 
 def htmlify(text):
-  lines = text.splitlines()
-  lines = [_mangle_line(l) for l in lines]
+  blocks = text.split(_separator)
 
-  return '<html><body><tt>%s</tt></body></html>' % "<br>".join(lines)
+  if len(blocks) == 3:
+    caption, commitinfo, changes = blocks
+
+    output = [_mangle_line(l) for l in caption.splitlines()]
+    output.append('<hr>')
+    output.extend([_mangle_line(l) for l in commitinfo.splitlines()])
+    output.append('<hr>')
+    output.extend([_mangle_line(l) for l in changes.splitlines()])
+
+  else:
+    lines = text.splitlines()
+    output = [_mangle_line(l) for l in lines]
+
+  return '<html><body><tt>%s</tt></body></html>' % "<br>".join(output)
