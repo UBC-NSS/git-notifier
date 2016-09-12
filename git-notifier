@@ -90,6 +90,7 @@ Options = [
     ("maxage", True, 30, "max age for commits to report, older ones will be ignored (days; default 30)"),
     ("mailserver", True, None, "SMTP server. If None, sendmail binary is used instead"),
     ("config", True, ConfigPath, "Path to configuration file"),
+    ("pace", True, 1.0, "time to wait between emails (seconds; default 1.0)"),
     ]
 
 class State:
@@ -228,16 +229,22 @@ class GitConfig:
             if isinstance(default, int):
                 defval = int(defval)
 
+            if isinstance(default, float):
+                defval = float(defval)
+
             if not arg:
                 defval = bool(defval)
-
-            if not arg:
                 action = "store_true" if not default else "store_false"
                 parser.add_option("--%s" % name, action=action, dest=name, default=defval, help=help)
-
             else:
-                type = "string" if not isinstance(default, int) else "int"
-                parser.add_option("--%s" % name, action="store", type=type, default=defval, dest=name, help=help)
+                if isinstance(default, int):
+                    parser_type="int"
+                elif isinstance(default, float):
+                    parser_type="float"
+                else:
+                    parser_type="string"
+
+                parser.add_option("--%s" % name, action="store", type=parser_type, default=defval, dest=name, help=help)
 
         (options, args) = parser.parse_args(args)
 
@@ -484,7 +491,8 @@ def sendMail(subject, out, fname, rev=None):
     # get sent back-to-back and are likely to end up with identical timestamps,
     # which may then make them appear to have arrived in the wrong order.
     if not Config.debug:
-        time.sleep(60)
+        if sendMail.emails_sent > 0 and Config.pace > 0:
+            time.sleep(Config.pace)
 
 def entryAdded(key, value, rev):
     if not reportHead(value):
