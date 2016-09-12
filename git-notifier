@@ -494,6 +494,12 @@ def sendMail(subject, out, fname, rev=None):
         if sendMail.emails_sent > 0 and Config.pace > 0:
             time.sleep(Config.pace)
 
+    sendMail.emails_sent += 1
+    sendMail.bytes_sent  += len(msg)
+
+sendMail.emails_sent = 0
+sendMail.bytes_sent = 0
+
 def entryAdded(key, value, rev):
     if not reportHead(value):
         return
@@ -796,6 +802,21 @@ if report:
             # Just send a summary for heads that now include some new stuff.
             if len(set(path) - new_revs):
                 headMoved(head, path)
+
+
+
+if sendMail.emails_sent > 0:
+    num_recipients = len(Config.mailinglist.split(','))
+
+    print "[git-notifier] Sent email (%d, %dkiB total) to %d subscriber%s." % (
+        sendMail.emails_sent,
+        (sendMail.bytes_sent + 1023) / 1024,
+        num_recipients, "s" if num_recipients > 1 else ""
+    )
+    print ""
+else:
+    print "[git-notifier] No email sent."
+    print ""
 
 if not Config.noupdate:
     current.writeTo(CacheFile)
