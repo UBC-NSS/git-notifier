@@ -6,6 +6,54 @@ Git post-receive hook which sends commit emails.
 The script is highly configurable. See README.rst for the manual.
 """
 
+#
+# ==== Normal hook conventions
+#
+# From https://git-scm.com/docs/githooks
+#
+#
+# This hook is invoked by git-receive-pack on the remote repository,
+# which happens when a git push is done on a local repository. It
+# executes on the remote repository once after all the refs have been
+# updated.
+# ...
+# Both standard output and standard error output are forwarded to git
+# send-pack on the other end, so you can simply echo messages for the
+# user.
+#
+# post-receive executes once for the receive operation. It takes no
+# arguments, but for each ref to be updated it receives on standard
+# input a line of the format:
+#
+#  <old-value> SP <new-value> SP <ref-name> LF
+#
+# where <old-value> is the old object name stored in the ref,
+# <new-value> is the new object name to be stored in the ref and
+# <ref-name> is the full name of the ref. When creating a new ref,
+# <old-value> is 40 0.
+#
+# If the hook exits with non-zero status, none of the refs will be
+# updated. If the hook exits with zero, updating of individual refs
+# can still be prevented by the update hook.
+#
+# ==== Git-notifier Operation
+#
+# git-notifier does not read updates from the command line. Rather, it
+# reads the current state by inspecting the local repository directly
+# (i.e. shelling out to `git`), by comparing local revisions with a
+# local file-database, and saving this revision state at the end of
+# the run.
+#
+# The file database serves the double purpose of determining whether
+# or not an email has been sent for a revision, and to build the list
+# of commits that are "new".
+#
+# It's somewhat broken, in the sense that if the state file misses an
+# update, e.g. due to a crash or due to a config setting, then the
+# next push will include mails sent as if they came from user of the
+# previous push.
+#
+
 # pylint: disable=bad-whitespace
 # pylint: disable=invalid-name
 # pylint: disable=missing-docstring
