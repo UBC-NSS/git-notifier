@@ -682,14 +682,14 @@ def sendChangeMail(rev, subject, heads, show_cmd, diff_cmd, stat_cmd):
 
     else:
         (tmp, tname) = makeTmp()
-        diff = git(diff_cmd, stdout_to=tmp)
+        git(diff_cmd, stdout_to=tmp)
         tmp.close()
 
         size = os.path.getsize(tname)
 
         if size > Config.maxdiffsize:
             (tmp, tname) = makeTmp()
-            diff = git(stat_cmd, stdout_to=tmp)
+            git(stat_cmd, stdout_to=tmp)
             tmp.close()
             footer = "\nDiff suppressed because of size. To see it, use:\n\n    git %s" % diff_cmd
 
@@ -717,8 +717,9 @@ def sendChangeMail(rev, subject, heads, show_cmd, diff_cmd, stat_cmd):
 
     sendMail(subject, out, fname, rev)
 
-# Sends notification for a specific revision.
 def commit(current, rev, force=False, subject_head=None):
+    """Sends notification for a specific revision."""
+
     if rev in current.reported and not force:
         # Already reported in this run of the script.
         log("Flagged revision %s for notification, but already reported this time" % rev)
@@ -758,7 +759,7 @@ def commit(current, rev, force=False, subject_head=None):
 # Sends a diff between two revisions.
 #
 # Only used in manual mode now.
-def diff(head, first, last):
+def diff(current, head, first, last):
     # We record a pseudo-revision to avoid sending the same diff twice.
     rev = "%s-%s" % (head, last)
     if current and not rev in current.diffs:
@@ -782,12 +783,12 @@ def diff(head, first, last):
 # the path as seen.
 #
 # Only used in manual mode now.
-def diffPath(head, revs):
+def diffPath(current, head, revs):
     last = None
 
     for rev in revs:
         if last:
-            diff(head, last, rev)
+            diff(current, head, last, rev)
         last = rev
 
 # Sends commit notifications for a set of revisions.
@@ -837,6 +838,8 @@ def main():
         log("Initial run, no reporting of changes")
         report = False
 
+    current = getCurrent()
+
     if Config.diff: #pylint: disable=no-member
         # Manual diff mode. The argument must be of the form "[old-rev..]new-rev".
         path = [rev.strip() for rev in Config.diff.split("..")] #pylint: disable=no-member
@@ -847,11 +850,9 @@ def main():
 
         revs = git(["rev-list", "--reverse --date-order", path[1], "^%s" % path[0]])
 
-        diffPath("<manual-diff>", revs)
+        diffPath(current, "<manual-diff>", revs)
 
         sys.exit(0)
-
-    current = getCurrent()
 
     if Config.manual: #pylint: disable=no-member
         # Manual report mode. The argument must be of the form "[old-rev..]new-rev".
