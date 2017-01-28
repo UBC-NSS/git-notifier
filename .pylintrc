@@ -40,6 +40,7 @@ load-plugins=
 # --disable=W"
 #disable=
 
+disable=superfluous-parens
 
 [REPORTS]
 
@@ -80,7 +81,7 @@ ignore-mixin-members=yes
 
 # List of classes names for which member attributes should not be checked
 # (useful for classes with attributes dynamically set).
-ignored-classes=SQLObject
+ignored-classes=SQLObject,GitConfig
 
 # When zope mode is activated, add a predefined set of Zope acquired attributes
 # to generated-members.
@@ -124,7 +125,7 @@ additional-builtins=
 [FORMAT]
 
 # Maximum number of characters on a single line.
-max-line-length=80
+max-line-length=100
 
 # Regexp for a line that is allowed to be longer than the limit.
 ignore-long-lines=^\s*(# )?<?https?://\S+>?$
