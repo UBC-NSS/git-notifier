@@ -122,6 +122,13 @@ else:
 
 SENDER = os.environ["GL_USER"] if gitolite else None
 
+# Configuration settings for the run
+Config = None
+
+# The local repository database for determining the revisions that
+# have previously been mailed out.
+Cache = None
+
 Options = [
     # Name, argument, default, help,
     ("allchanges", True, set(), "branches for which *all* changes are to be reported"),
@@ -529,8 +536,18 @@ def startMailBody():
     print >>out, mailTag("Repository", getRepo())
     return (out, fname)
 
-def generateMail(subject, body, rev=None):
-    if Config.mailsubjectlen:
+def _generateMail(body, headers=None):
+    """returns the complete email message as a string
+
+       @body The string body
+       @headers A basic set of message headers.
+"""
+
+    if not headers:
+        headers = {}
+
+    subject = headers.get('Subject', None)
+    if subject and Config.mailsubjectlen:
         try:
             maxlen = int(Config.mailsubjectlen)
             if len(subject) > maxlen:
@@ -538,42 +555,68 @@ def generateMail(subject, body, rev=None):
         except ValueError:
             pass
 
-    repo = getRepo()
+    msg = email.mime.multipart.MIMEMultipart('alternative')
 
-    sender = Config.sender
+    if headers.get('From', None):
+        msg['From'] = encodeAddressList(headers.get('From'))
 
     emailprefix = Config.emailprefix
     emailprefix = emailprefix.replace("%r", getRepoName())
+    if subject:
+        msg['Subject'] = encodeHeader('%s %s' % (emailprefix, subject))
+    else:
+        msg['Subject'] = encodeHeader(emailprefix)
 
-    if not sender:
-        if rev:
-            sender = "".join(git("show '--pretty=format:%%cn <%%ce>' -s %s^{commit}" % rev))
-        else:
-            sender = whoami
-
-    msg = email.mime.multipart.MIMEMultipart('alternative')
-    msg['From'] = encodeAddressList(sender)
     msg['To'] = encodeAddressList(Config.mailinglist)
-    msg['Subject'] = encodeHeader('%s %s' % (emailprefix, subject))
 
     if Config.replyto:
         msg['Reply-To'] = encodeHeader(Config.replyto)
 
-    if rev:
-        date = "".join(git("show '--pretty=format:%%cD' -s %s^{commit}" % rev))
-        msg['Date'] = encodeHeader(date)
+    if headers.get('Date', None):
+        msg['Date'] = encodeHeader(headers['Date'])
 
-    msg['X-Git-Repository'] = encodeHeader(repo)
+    msg['X-Git-Repository'] = encodeHeader(getRepo())
     msg['X-Mailer'] = encodeHeader('%s %s' % (Name, VERSION))
     msg.attach(email.mime.text.MIMEText(body, 'plain', 'utf-8'))
     msg.attach(email.mime.text.MIMEText(htmlify.htmlify(body), 'html', 'utf-8'))
 
     return msg.as_string()
 
-def sendMail(subject, out, fname, rev=None):
-    out.close()
+def basicHeaders(rev=None):
+    """set From and Date based on config and properties of an (optional) revision."""
+    headers = {}
 
-    msg = generateMail(subject, open(fname).read(), rev)
+    sender = Config.sender
+    if not sender:
+        if rev:
+            sender = "".join(git("show '--pretty=format:%%cn <%%ce>' -s %s^{commit}" % rev))
+        else:
+            sender = whoami
+
+    headers['From'] = sender
+
+    if rev:
+        # %cD: committer date, RFC2822 style
+        # -s: no diff output
+        date = "".join(git("show '--pretty=format:%%cD' -s %s^{commit}" % rev))
+
+    headers['Date'] = date
+    return headers
+
+def sendMail(fname, headers):
+    """sends out one email, using the given body contents filename, and the
+       given headers.
+
+    @fname: the filename containing the body of the message
+    @headers: supports the following
+      {
+        'Subject': "string"
+        'From': "string"
+        'Date': "RFC822 string"
+      }
+    """
+    with open(fname, "r") as bodyfd:
+        msg = _generateMail(bodyfd.read(), headers)
 
     if Config.debug:
         print msg
@@ -613,7 +656,11 @@ def entryAdded(key, value, rev):
     print >>out, mailTag("New %s" % key, value)
     print >>out, mailTag("Referencing", rev)
 
-    sendMail("%s '%s' created" % (key, value), out, fname, rev)
+    out.close()
+
+    headers = basicHeaders(rev)
+    headers['Subject'] = "%s '%s' created" % (key, value)
+    sendMail(fname, headers)
 
 def entryDeleted(key, value):
     if not reportHead(value):
@@ -625,7 +672,11 @@ def entryDeleted(key, value):
 
     print >>out, mailTag("Deleted %s" % key, value)
 
-    sendMail("%s '%s' deleted" % (key, value), out, fname)
+    out.close()
+
+    headers = basicHeaders(None)
+    headers['Subject'] = "%s '%s' deleted" % (key, value)
+    sendMail(fname, headers)
 
 def sendChangeMail(rev, subject, heads, show_cmd, diff_cmd, stat_cmd):
     """
@@ -715,7 +766,11 @@ def sendChangeMail(rev, subject, heads, show_cmd, diff_cmd, stat_cmd):
         print >>out, "debug: diff_cmd = git %s" % diff_cmd
         print >>out, "debug: stat_cmd = git %s" % stat_cmd
 
-    sendMail(subject, out, fname, rev)
+    out.close()
+
+    headers = basicHeaders(rev)
+    headers['Subject'] = subject
+    sendMail(fname, headers)
 
 def commit(current, rev, force=False, subject_head=None):
     """Sends notification for a specific revision."""
@@ -809,8 +864,6 @@ def headMoved(head, path):
 
     log("Head moved: %s -> %s" % (head, path[-1]))
 
-    subject = git("show '--pretty=format:%%s (%%h)' -s %s" % path[-1])
-
     (out, fname) = startMailBody()
 
     print >>out, "Branch '%s' now includes:" % head
@@ -819,10 +872,11 @@ def headMoved(head, path):
     for rev in path:
         print >>out, "    ", git("show -s --pretty=oneline --abbrev-commit %s" % rev)[0]
 
-    sendMail("%s's head updated: %s" % (head, subject[0]), out, fname)
-
-Config = None
-Cache = None
+    out.close()
+    headers = basicHeaders(None)
+    subject = git("show '--pretty=format:%%s (%%h)' -s %s" % path[-1])
+    headers['Subject'] = "%s's head updated: %s" % (head, subject[0])
+    sendMail(fname, headers)
 
 def main():
     log("Running for %s" % os.getcwd())
