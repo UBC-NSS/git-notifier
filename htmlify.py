@@ -1,7 +1,14 @@
 import cgi
 import re
 
+# pylint: disable=bad-indentation
+
+# separates the commit message, diff, and tags
 _separator = '>' + ('-'*63) + '\n'
+
+# separates multiple emails in a changeset
+_emailsep = '>' + ('*'*63)
+
 _pattern = re.compile('(  +)')
 
 def _mangle_line(line):
@@ -17,20 +24,24 @@ def _mangle_line(line):
     return '<tt style="color:#080">%s</tt>' % (content)
   return content
 
+def _breakemail(text):
+  def _convert_block(text):
+    return [_mangle_line(l) for l in text.splitlines()]
+
+  output = []
+  for i, blk in enumerate(text.split(_separator)):
+    if i > 0:
+      output.append('<hr>')
+    output.extend(_convert_block(blk))
+  return "<br>".join(output)
+
+def _breakbody(text):
+  return ("<hr style='" +
+          "height: 3px; background-color: #eee; border: solid 1px; color: #ccc;'" +
+          "></hr>").join(
+              [_breakemail(emailtext) for emailtext in text.split(_emailsep)])
+
 def htmlify(text):
-  blocks = text.split(_separator)
-
-  if len(blocks) == 3:
-    caption, commitinfo, changes = blocks
-
-    output = [_mangle_line(l) for l in caption.splitlines()]
-    output.append('<hr>')
-    output.extend([_mangle_line(l) for l in commitinfo.splitlines()])
-    output.append('<hr>')
-    output.extend([_mangle_line(l) for l in changes.splitlines()])
-
-  else:
-    lines = text.splitlines()
-    output = [_mangle_line(l) for l in lines]
-
-  return '<html><body><tt>%s</tt></body></html>' % "<br>".join(output)
+  return ('<html><body><tt>' +
+          _breakbody(text) +
+          '</tt></body></html>')

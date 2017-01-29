@@ -167,6 +167,15 @@ The options are:
         ones are reported. ``<branches>`` is a list of comma-separated
         names of heads to treat this way.
 
+    ``--changeset``
+
+        Group commits from a push into one single changeset
+        email. This email will include the concatenation of all
+        commits. This is different than ``--allchanges`` in that
+        commits that have been reported in the past will still be
+        omitted from the changeset email. If this is set,
+        ``--maxdiffsize`` will apply to the email as a whole.
+
     ``--debug``
         Prints the mails that would normally be generated to
         standard error instead, without sending them. The output
@@ -269,6 +278,13 @@ The options are:
         Does not update the internal state file, meaning that any
         updates will be reported *again* next time the script is
         run.
+
+    ``--pace <seconds>``
+        If multiple emails are to be sent out, this is the amount of
+	time in seconds to wait for between submissions. This may help
+	ensure emails are received in the same order they are
+	sent. Default is 1.0 seconds. Can be set to 0 or a negative
+	value to disable the feature.
 
     ``--replyto <email>``
         Adds a ``Reply-To: <email>`` header to outgoing mails.
