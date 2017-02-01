@@ -1,0 +1,4 @@
+
+# for github-notifier
+pygithub == 1.29
+
