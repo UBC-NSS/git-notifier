@@ -631,6 +631,17 @@ def sendMail(fname, headers):
         'Date': "RFC822 string"
       }
     """
+    if not Config.debug:
+        # Wait a bit in case we're sending more mail. Otherwise, the
+        # mails get sent back-to-back and are likely to end up with
+        # identical timestamps, which may then make them appear to
+        # have arrived in the wrong order.
+        if sendMail.emails_sent > 0 and Config.pace > 0:
+            now = time.time()
+            while now - sendMail.last_sent < Config.pace:
+                time.sleep(Config.pace - (now - sendMail.last_sent))
+                now = time.time()
+
     with open(fname, "r") as bodyfd:
         msg = _generateMail(bodyfd.read(), headers)
 
@@ -648,18 +659,13 @@ def sendMail(fname, headers):
         print >>stdin, msg
         stdin.close()
 
-    # Wait a bit in case we're going to send more mails. Otherwise, the mails
-    # get sent back-to-back and are likely to end up with identical timestamps,
-    # which may then make them appear to have arrived in the wrong order.
-    if not Config.debug:
-        if sendMail.emails_sent > 0 and Config.pace > 0:
-            time.sleep(Config.pace)
-
+    sendMail.last_sent = time.time()
     sendMail.emails_sent += 1
     sendMail.bytes_sent  += len(msg)
 
 sendMail.emails_sent = 0
 sendMail.bytes_sent = 0
+sendMail.last_sent = 0
 
 def entryAdded(key, value, rev):
     if not reportHead(value):
