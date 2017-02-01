@@ -493,7 +493,7 @@ def deleteTmps():
         os.unlink(tmp)
 
 def mailTag(key, value):
-    return "%-11s: %s" % (key, value)
+    return "%-11s %s" % (key + ":", value)
 
 def encodeHeader(hdr):
     try:
