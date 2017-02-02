@@ -168,7 +168,6 @@ The options are:
         names of heads to treat this way.
 
     ``--changeset``
-
         Group commits from a push into one single changeset
         email. This email will include the concatenation of all
         commits. This is different than ``--allchanges`` in that
