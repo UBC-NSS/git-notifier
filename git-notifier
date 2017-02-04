@@ -779,7 +779,7 @@ def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
 
     yield _output_tags()
 
-    yield "".join([line for line in _git_show_lines()])
+    yield "\n".join([line for line in _git_show_lines()])
 
     if tname:
         # diff
