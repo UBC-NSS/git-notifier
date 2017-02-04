@@ -699,10 +699,10 @@ def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
     Utility function. Writes a notification email,
     yielding each part in turn, as a string
 
-      three parts: (1) tags. branch names and revision link
-                   (2) the output of a show command,
-                   (3) the output of a diff command.
-                   (4) a footer (+ optional debug info)
+      parts: (1) tags. branch names and revision link
+             (2) the output of a show command,
+             (3) the output of a diff command.
+             (4) a footer (+ optional debug info)
 
     @out: the file to append the new mail body to
     @rev: the revision to send
