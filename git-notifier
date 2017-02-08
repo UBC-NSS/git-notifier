@@ -615,8 +615,8 @@ def basicHeaders(rev=None):
         # %cD: committer date, RFC2822 style
         # -s: no diff output
         date = "".join(git("show '--pretty=format:%%cD' -s %s^{commit}" % rev))
+        headers['Date'] = date
 
-    headers['Date'] = date
     return headers
 
 def sendMail(fname, headers):
