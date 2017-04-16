@@ -187,27 +187,26 @@ class State(object):
         self.reported = set()
 
     def writeTo(self, filename):
-        if os.path.exists(CacheFile):
+        out, tmpname = makeTmp()
+        try:
+            for (head, ref) in self.heads.items():
+                print >>out, "head", head, ref
+
+            for (tag, ref) in self.tags.items():
+                print >>out, "tag", tag, ref
+
+            for rev in self.revs:
+                print >>out, "rev", rev
+
             try:
-                shutil.move(CacheFile, CacheFile + ".bak")
+                shutil.move(filename, filename + ".bak")
             except IOError:
                 pass
 
-        out = open(filename, "w")
-
-        for (head, ref) in self.heads.items():
-            print >>out, "head", head, ref
-
-        for (tag, ref) in self.tags.items():
-            print >>out, "tag", tag, ref
-
-        for rev in self.revs:
-            print >>out, "rev", rev
-
-        # No longer used.
-        #
-        # for rev in self.diffs:
-        #     print >>out, "diff", rev
+            out.close()
+            shutil.move(tmpname, filename)
+        finally:
+            out.close()
 
     def readFrom(self, filename):
         self.clear()
