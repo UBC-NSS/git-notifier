@@ -699,22 +699,21 @@ def entryDeleted(key, value):
     sendMail(fname, headers)
 
 def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
-    """
-    Utility function. Writes a notification email,
-    yielding each part in turn, as a string
+    """Generator of email notification parts, yelding each of the
+    following:
 
       parts: (1) tags. branch names and revision link
              (2) the output of a show command,
              (3) the output of a diff command.
              (4) a footer (+ optional debug info)
 
-    @out: the file to append the new mail body to
     @rev: the revision to send
     @heads: a list of names for branches that contain rev
     @show_cmd: a shell command for part (1)
     @diff_cmd: a shell command for part (2)
     @stat_cmd: a shell command for part (2) without the patch
                (used if the diff exceeds the size limit)
+
     """
 
     def _output_tags():
