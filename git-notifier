@@ -405,6 +405,7 @@ def git(args, stdout_to=subprocess.PIPE, strip=True):
         pass
 
     try:
+        log("CMD git " + args)
         child = subprocess.Popen("git " + args, shell=True, stdin=None,
                                  stdout=stdout_to, stderr=subprocess.PIPE)
         (stdout, stderr) = child.communicate()
@@ -413,7 +414,7 @@ def git(args, stdout_to=subprocess.PIPE, strip=True):
 
     if child.returncode != 0 and stderr:
         msg = ": %s" % stderr if stderr else ""
-        error("git child failed with exit code %d%s" % (child.returncode, msg))
+        error("CMD git child failed with exit code %d%s" % (child.returncode, msg))
 
     if stdout_to != subprocess.PIPE:
         return []
@@ -771,7 +772,7 @@ def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
         tmp.close()
 
         size = os.path.getsize(tname)
-
+        log("diff command output %d B" % (size,))
         if size > Config.maxdiffsize:
             (tmp, tname) = makeTmp()
             git(stat_cmd, stdout_to=tmp)
@@ -1104,6 +1105,7 @@ def main():
         print ""
 
     if not Config.noupdate:
+        log("rewriting repository cache file %s" % (CacheFile,))
         current.writeTo(CacheFile)
 
 if __name__ == "__main__":
