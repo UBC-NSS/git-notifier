@@ -493,7 +493,10 @@ makeTmp.Tmps = []
 
 def deleteTmps():
     for tmp in makeTmp.Tmps:
-        os.unlink(tmp)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 def mailTag(key, value):
     return "%-11s %s" % (key + ":", value)
@@ -1103,10 +1106,11 @@ def main():
     if not Config.noupdate:
         current.writeTo(CacheFile)
 
-    deleteTmps()
-
 if __name__ == "__main__":
     Config = GitConfig(sys.argv[1:])
     Cache = State()
 
-    main()
+    try:
+        main()
+    finally:
+        deleteTmps()
