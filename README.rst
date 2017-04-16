@@ -3,17 +3,20 @@
 .. |date| date::
 
 .. Version number is filled in automatically.
-.. |version| replace:: 0.7
+.. |version| replace:: 0.7-ubc
 
 git-notifier
 ============
 
 :Version: |version|
-:Home: http://www.icir.org/robin/git-notifier
-:Author: Robin Sommer <robin@icir.org>
+:Original Author: Robin Sommer <robin@icir.org>
 :Date: |date|
 
 .. contents::
+
+The main difference between the UBC-NSS version and the original is
+that this one allows batching of multiple commits per email (html and
+plaintext), and has security improvements when invoking subshells.
 
 Introduction
 ------------
