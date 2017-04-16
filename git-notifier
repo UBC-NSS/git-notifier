@@ -370,7 +370,9 @@ class GitConfig(object): #pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _git_config(key, default):
-        cfg = git(["config hooks.%s" % key])
+        code, cfg = cmd(["git", "config", "hooks.%s" % key], can_fail=True)
+        if code not in (0, 1):
+            error("cmd `git config hooks.%s` returned unexpected error code: %d" % (key, code))
         return cfg[0] if cfg else default
 
     @staticmethod
@@ -384,56 +386,97 @@ class GitConfig(object): #pylint: disable=too-many-instance-attributes
             return default
 
 def log(msg):
-    print >>Config.log, "%s - %s" % (time.asctime(), msg)
+    # Config is not defined until options are parsed
+    if Config and Config.log:
+        print >>Config.log, "%s - %s" % (time.asctime(), msg)
+    else:
+        print >>sys.stderr, "%s - %s" % (time.asctime(), msg)
 
 def error(msg):
     log("Error: %s" % msg)
     sys.exit(1)
 
-def git(args, stdout_to=subprocess.PIPE, strip=True):
-    if isinstance(args, tuple) or isinstance(args, list):
-        args = " ".join(args)
+def debug(msg):
+    # Config is not defined until options are parsed
+    if Config and Config.debug:
+        print >>sys.stderr, msg
+
+def cmd(*args, **kwargs):
+    """
+     cmd("ls", "-al", ...)
+    or
+     cmd(["ls, "-al"], ...)
+
+    kwargs:
+      stdout_to = file to send stdout and stderr [default PIPE]
+      strip = strip empty lines from output      [default True]
+      can_fail = when False, exit on error       [default False]
+
+    returns:
+
+      (exitcode, stdout)
+
+      stdout is an array of lines of output
+
+      if exitcode is non-zero and can_fail is False, the program will exit
+
+    """
+    if len(args) == 1 and isinstance(args[0], (list, tuple)):
+        args = list(args[0])
+
+    stdout_to = kwargs.pop("stdout_to", subprocess.PIPE)
+    strip = kwargs.pop("strip", True)
+    can_fail = kwargs.pop("can_fail", False)
+
+    debug("> cmd %s" % (" ".join(args),))
 
     try:
-        # git() is used during option parsing
-        # so Config may not be fully formed yet.
-        if Config and Config.debug:
-            print >>sys.stderr, "> git " + args
-    except NameError:
-        # Config may not be defined yet.
-        pass
-
-    try:
-        log("CMD git " + args)
-        child = subprocess.Popen("git " + args, shell=True, stdin=None,
+        child = subprocess.Popen(args, shell=False, stdin=None,
                                  stdout=stdout_to, stderr=subprocess.PIPE)
         (stdout, stderr) = child.communicate()
     except OSError, e:
-        error("cannot start git: %s" % str(e))
+        error("failed to run command `%s`: %s" % (" ".join(args), str(e)))
 
-    if child.returncode != 0 and stderr:
+    def _process_output(stdout):
+        if stdout_to != subprocess.PIPE:
+            return []
+        if strip:
+            return [line.strip() for line in stdout.split("\n") if line]
+        else:
+            return stdout.split("\n")
+
+    if child.returncode != 0 and not can_fail:
         msg = ": %s" % stderr if stderr else ""
-        error("CMD git child failed with exit code %d%s" % (child.returncode, msg))
-
-    if stdout_to != subprocess.PIPE:
-        return []
-
-    if strip:
-        return [line.strip() for line in stdout.split("\n") if line]
+        error("command `%s` failed with exit code %d: %s" % (" ".join(args),
+                                                             child.returncode, msg))
     else:
-        return stdout.split("\n")
+        if stderr:
+            log("err: %s" % (stderr,))
+        return (child.returncode, _process_output(stdout))
+
+def cmd_output(*args, **kwargs):
+    """same as cmd(), except strips the exit code returnvalue"""
+
+    _, output = cmd(*args, **kwargs)
+    return output
 
 def getHeads(state):
-    for (rev, head) in [head.split() for head in git("show-ref --heads")]:
+    code, output = cmd("git", "show-ref", "--heads", can_fail=True)
+    if code not in (0, 1):
+        error("could not get list of heads")
+    for (rev, head) in [head.split() for head in output]:
         if head.startswith("refs/heads/"):
             head = head[11:]
 
         state.heads[head] = rev
 
 def getTags(state):
-    for (rev, tag) in [head.split() for head in git("show-ref --tags")]:
+    code, output = cmd("git", "show-ref", "--tags", can_fail=True)
+    if code not in (0, 1):
+        error("could not get list of tags")
+    for (rev, tag) in [head.split() for head in output]:
         # We are only interested in annotaged tags.
-        typ = git("cat-file -t %s" % rev)[0]
+        typ = cmd_output("git", "cat-file", "-t", rev)[0]
 
         if typ == "tag":
             if tag.startswith("refs/tags/"):
@@ -442,10 +485,10 @@ def getTags(state):
             state.tags[tag] = rev
 
 def getReachableRefs(state):
-    keys = ["'%s'" % k for k in state.heads.keys() + state.tags.keys()]
+    keys = ["%s" % k for k in state.heads.keys() + state.tags.keys()]
 
     if keys:
-        for rev in git(["rev-list"] + keys):
+        for rev in cmd_output(["git", "rev-list"] + keys):
             state.revs.add(rev)
 
 def getCurrent():
@@ -608,7 +651,8 @@ def basicHeaders(rev=None):
     sender = Config.sender
     if not sender:
         if rev:
-            sender = "".join(git("show '--pretty=format:%%cn <%%ce>' -s %s^{commit}" % rev))
+            sender = "".join(cmd_output("git", "show", "--pretty=format:%%cn <%%ce>" % (),
+                                        "-s", "%s^{commit}" % rev))
         else:
             sender = whoami
 
@@ -617,7 +661,9 @@ def basicHeaders(rev=None):
     if rev:
         # %cD: committer date, RFC2822 style
         # -s: no diff output
-        date = "".join(git("show '--pretty=format:%%cD' -s %s^{commit}" % rev))
+        date = "".join(cmd_output("git", "show",
+                                  "--pretty=format:%%cD" % (),
+                                  "-s", "%s^{commit}" % rev))
         headers['Date'] = date
 
     return headers
@@ -697,7 +743,7 @@ def entryDeleted(key, value):
     headers['Subject'] = "%s '%s' deleted" % (key, value)
     sendMail(fname, headers)
 
-def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
+def _writeChangeMail(rev, heads, diff_cmd, stat_cmd):
     """Generator of email notification parts, yelding each of the
     following:
 
@@ -708,7 +754,6 @@ def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
 
     @rev: the revision to send
     @heads: a list of names for branches that contain rev
-    @show_cmd: a shell command for part (1)
     @diff_cmd: a shell command for part (2)
     @stat_cmd: a shell command for part (2) without the patch
                (used if the diff exceeds the size limit)
@@ -727,7 +772,7 @@ def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
         return "\n".join(buf)
 
     def _git_show_lines():
-        for line in git(show_cmd, strip=False):
+        for line in cmd_output(show_cmd, strip=False):
             if line == "---":
                 yield Separator
             else:
@@ -747,14 +792,24 @@ def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
     # Filter out revisions that are too old.
     if Config.maxage:
         # %ct is committer date (unix timestamp)
-        age = int(git("show -s --format=%%ct %s " % rev)[0], 10)
+        age = int(cmd_output("git", "show", "-s", "--format=%%ct" % (), rev)[0], 10)
 
         if age < Config.maxage:
             log("Revision %s too old for reporting, skipped" % rev)
             return
 
+    #ex:
+    #  commit 2f6cf503214457e51a11ca3d23afdb2e1f9105d4
+    #  Author: First Last <first.last@example.com>
+    #  Date:   Sat Jan 28 17:05:20 2017 -0800
+    #
+    #  [doc] add readme
+    #
+    show_cmd = ["git", "show", "-s", "--no-color", "--find-copies-harder",
+                "--pretty=medium", rev]
+    show = cmd_output(show_cmd)
+
     footer = ""
-    show = git(show_cmd)
     tname = None
     size = 0
 
@@ -766,16 +821,22 @@ def _writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd):
             return
     else:
         (tmp, tname) = makeTmp()
-        git(diff_cmd, stdout_to=tmp)
+        code, _ = cmd(diff_cmd, stdout_to=tmp, can_fail=True)
         tmp.close()
 
-        size = os.path.getsize(tname)
-        log("diff command output %d B" % (size,))
-        if size > Config.maxdiffsize:
+        if code != 0:
             (tmp, tname) = makeTmp()
-            git(stat_cmd, stdout_to=tmp)
+            cmd_output(stat_cmd, stdout_to=tmp)
             tmp.close()
-            footer = "\nDiff suppressed because of size. To see it, use:\n\n    git %s" % diff_cmd
+            footer = "\nDiff suppressed because the diff command exited with code=%d. To see it, use:\n\n   %s" % (code, " ".join(diff_cmd))
+        else:
+            size = os.path.getsize(tname)
+            log("diff command output %d B" % (size,))
+            if size > Config.maxdiffsize:
+                (tmp, tname) = makeTmp()
+                cmd_output(stat_cmd, stdout_to=tmp)
+                tmp.close()
+                footer = "\nDiff suppressed because of size. To see it, use:\n\n    %s" % (" ".join(diff_cmd))
 
     # The email is to be sent out.
 
@@ -811,20 +872,22 @@ def diff(current, head, first, last):
 
     log("Diffing %s..%s" % (first, last))
 
-    subject = git("show '--pretty=format:%%s (%%h)' -s %s" % last)
+    subject = cmd_output("git", "show", "--pretty=format:%%s (%%h)", "-s", last)
     subject = "%s diff: %s" % (head, subject[0])
 
     heads = [head]
 
-    show_cmd = "show -s --no-color --find-copies-harder --pretty=medium %s" % last
-    diff_cmd = "diff --patch-with-stat -m --no-color --find-copies-harder --ignore-space-at-eol %s %s" % (first, last)
-    stat_cmd = "diff --stat -m --no-color --find-copies-harder --ignore-space-at-eol %s %s" % (first, last)
+    diff_cmd = ["git", "diff", "--patch-with-stat", "-m", "--no-color", "--find-copies-harder",
+                "--ignore-space-at-eol", first, last]
+
+    stat_cmd = ["git", "diff", "--stat", "-m", "--no-color", "--find-copies-harder",
+                "--ignore-space-at-eol", first, last]
 
     headers = basicHeaders(rev)
     headers['Subject'] = subject
     is_empty = False
     with mailBody() as (out, fname):
-        for piece in _writeChangeMail(last, heads, show_cmd, diff_cmd, stat_cmd):
+        for piece in _writeChangeMail(last, heads, diff_cmd, stat_cmd):
             if piece.strip():
                 if not is_empty:
                     print >>out, Separator
@@ -875,7 +938,7 @@ def reportPath(current, revs, force=False, subject_head=None):
         log("New revision %s" % rev)
         current.reported.add(rev)
 
-        heads = [head.split()[-1] for head in git("branch --contains=%s" % rev)]
+        heads = [head.split()[-1] for head in cmd_output("git", "branch", "--contains=%s" % rev)]
         if not subject_head:
             subject_head = ",".join(heads)
 
@@ -891,30 +954,21 @@ def reportPath(current, revs, force=False, subject_head=None):
 
         # %s is the commit subject
         # %h abbreviated commit hash
-        subject = git("show '--pretty=format:%%s (%%h)' -s %s" % rev)
+        subject = cmd_output("git", "show", "--pretty=format:%%s (%%h)", "-s", rev)
         subject = "%s: %s" % (subject_head, subject[0])
 
-        #ex:
-        #  commit 2f6cf503214457e51a11ca3d23afdb2e1f9105d4
-        #  Author: First Last <first.last@example.com>
-        #  Date:   Sat Jan 28 17:05:20 2017 -0800
-        #
-        #  [doc] add readme
-        #
-        show_cmd = "show -s --no-color --find-copies-harder --pretty=medium %s" % rev
-
         # the statistics (line counts added/removed), and the patch itself.
-        diff_cmd = ("diff-tree --root --patch-with-stat --no-color --find-copies-harder "
-                    "--ignore-space-at-eol %s %s" % (merge_diff, rev))
+        diff_cmd = ["git", "diff-tree", "--root", "--patch-with-stat", "--no-color",
+                    "--find-copies-harder", "--ignore-space-at-eol", merge_diff, rev]
 
         # just the stat
-        stat_cmd = ("diff-tree --root --stat --no-color --find-copies-harder "
-                    "--ignore-space-at-eol %s" % (rev,))
+        stat_cmd = ["git", "diff-tree", "--root", "--stat", "--no-color", "--find-copies-harder",
+                    "--ignore-space-at-eol", rev]
 
         diff_bytes = 0
         output = False
 
-        for (i, piece) in enumerate(_writeChangeMail(rev, heads, show_cmd, diff_cmd, stat_cmd)):
+        for (i, piece) in enumerate(_writeChangeMail(rev, heads, diff_cmd, stat_cmd)):
             if i in separate:
                 print >>out, Separator
             if i == 2:
@@ -937,7 +991,7 @@ def reportPath(current, revs, force=False, subject_head=None):
                 continue
 
             if Config.ignoreremotes:
-                branches = [line.split()[-1] for line in git("branch -a --contains=%s" % rev)]
+                branches = [line.split()[-1] for line in cmd_output("git", "branch", "-a", "--contains=%s" % rev)]
 
                 for b in branches:
                     if b.startswith("remotes/"):
@@ -950,7 +1004,7 @@ def reportPath(current, revs, force=False, subject_head=None):
         return
 
     # Sort updates by time.
-    revs = git("rev-list --no-walk --reverse --date-order %s" % " ".join(revs))
+    revs = cmd_output(["git", "rev-list", "--no-walk", "--reverse", "--date-order"] + list(revs))
     revcount = 0
     all_heads = set()
     msg_headers = None
@@ -992,10 +1046,10 @@ def headMoved(head, path):
         print >>out, ""
 
         for rev in path:
-            print >>out, "    ", git("show -s --pretty=oneline --abbrev-commit %s" % rev)[0]
+            print >>out, "    ", cmd_output("git", "show", "-s", "--pretty=oneline", "--abbrev-commit", rev)[0]
 
     headers = basicHeaders(None)
-    subject = git("show '--pretty=format:%%s (%%h)' -s %s" % path[-1])
+    subject = cmd_output("git", "show", "--pretty=format:%%s (%%h)", "-s", path[-1])
     headers['Subject'] = "%s's head updated: %s" % (head, subject[0])
     sendMail(fname, headers)
 
@@ -1023,7 +1077,7 @@ def main():
         else:
             path = ("%s~1" % path[0], path[1])
 
-        revs = git(["rev-list", "--reverse --date-order", path[1], "^%s" % path[0]])
+        revs = cmd_output(["git", "rev-list", "--reverse", "--date-order", path[1], "^%s" % path[0]])
 
         diffPath(current, "<manual-diff>", revs)
 
@@ -1038,7 +1092,7 @@ def main():
         # this list contains the set of revisions (sorted) that are
         # reachable from new-rev, but excluding those reachable from
         # old-rev.
-        revs = git(["rev-list", "--reverse --date-order", path[1], "^%s" % path[0]])
+        revs = cmd_output(["git", "rev-list", "--reverse", "--date-order", path[1], "^%s" % path[0]])
         reportPath(current, revs, force=True)
 
         sys.exit(0)
@@ -1078,7 +1132,7 @@ def main():
         for head in stable_heads:
             old_rev = Cache.heads[head]
             new_rev = current.heads[head]
-            path = git(["rev-list", "--reverse --date-order", new_rev, "^%s" % old_rev])
+            path = cmd_output(["git", "rev-list", "--reverse", "--date-order", new_rev, "^%s" % old_rev])
 
             if head in Config.allchanges:
                 # Want to see all commits for this head, even if already reported
