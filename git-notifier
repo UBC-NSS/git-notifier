@@ -651,8 +651,8 @@ def basicHeaders(rev=None):
     sender = Config.sender
     if not sender:
         if rev:
-            sender = "".join(cmd_output("git", "show", "--pretty=format:%%cn <%%ce>" % (),
-                                        "-s", "%s^{commit}" % rev))
+            sender = "".join(cmd_output("git", "show", "--pretty=format:%cn <%ce>",
+                                        "-s", "%s^{commit}" % (rev,)))
         else:
             sender = whoami
 
@@ -662,8 +662,8 @@ def basicHeaders(rev=None):
         # %cD: committer date, RFC2822 style
         # -s: no diff output
         date = "".join(cmd_output("git", "show",
-                                  "--pretty=format:%%cD" % (),
-                                  "-s", "%s^{commit}" % rev))
+                                  "--pretty=format:%cD",
+                                  "-s", "%s^{commit}" % (rev,)))
         headers['Date'] = date
 
     return headers
@@ -792,7 +792,7 @@ def _writeChangeMail(rev, heads, diff_cmd, stat_cmd):
     # Filter out revisions that are too old.
     if Config.maxage:
         # %ct is committer date (unix timestamp)
-        age = int(cmd_output("git", "show", "-s", "--format=%%ct" % (), rev)[0], 10)
+        age = int(cmd_output("git", "show", "-s", "--format=%ct", rev)[0], 10)
 
         if age < Config.maxage:
             log("Revision %s too old for reporting, skipped" % rev)
@@ -872,7 +872,7 @@ def diff(current, head, first, last):
 
     log("Diffing %s..%s" % (first, last))
 
-    subject = cmd_output("git", "show", "--pretty=format:%%s (%%h)", "-s", last)
+    subject = cmd_output("git", "show", "--pretty=format:%s (%h)", "-s", last)
     subject = "%s diff: %s" % (head, subject[0])
 
     heads = [head]
@@ -954,7 +954,7 @@ def reportPath(current, revs, force=False, subject_head=None):
 
         # %s is the commit subject
         # %h abbreviated commit hash
-        subject = cmd_output("git", "show", "--pretty=format:%%s (%%h)", "-s", rev)
+        subject = cmd_output("git", "show", "--pretty=format:%s (%h)", "-s", rev)
         subject = "%s: %s" % (subject_head, subject[0])
 
         # the statistics (line counts added/removed), and the patch itself.
@@ -1049,7 +1049,7 @@ def headMoved(head, path):
             print >>out, "    ", cmd_output("git", "show", "-s", "--pretty=oneline", "--abbrev-commit", rev)[0]
 
     headers = basicHeaders(None)
-    subject = cmd_output("git", "show", "--pretty=format:%%s (%%h)", "-s", path[-1])
+    subject = cmd_output("git", "show", "--pretty=format:%s (%h)", "-s", path[-1])
     headers['Subject'] = "%s's head updated: %s" % (head, subject[0])
     sendMail(fname, headers)
 
